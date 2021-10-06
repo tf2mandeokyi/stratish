@@ -1,5 +1,5 @@
 import * as fs from 'fs';
-import * as glyphdata from './sbglyph.json';
+import * as glyphdata from './glyph.json';
 import { DOMImplementation, XMLSerializer } from 'xmldom';
 
 
@@ -11,7 +11,8 @@ interface Rect {
 }
 
 interface GlyphJsonParseResult {
-    primary_glyphs: { [alphabet: string] : PrimaryGlyph }
+    block_glyphs: { [alphabet: string] : BlockGlyph },
+    decal_glyphs: { [alphabet: string] : DecalGlyph }
 }
 
 
@@ -24,19 +25,17 @@ function transform_rect(rect: Rect, func: (pos: Pos2d) => Pos2d) : Rect {
 
 
 
-class PrimaryGlyph {
+class Glyph {
 
     polygons: Polygon[];
     rect: Rect;
-    child_rect: Rect;
 
-    constructor(polygons: Polygon[], rect: Rect, child_rect: Rect) {
+    constructor(polygons: Polygon[], rect: Rect) {
         this.polygons = polygons;
         this.rect = rect;
-        this.child_rect = child_rect;
     }
 
-    translate(func: (pos: Pos2d) => Pos2d) : PrimaryGlyph {
+    translate(func: (pos: Pos2d) => Pos2d) : Glyph {
         let new_polygons : Polygon[] = [];
         for(const polygon of this.polygons) {
             let new_polygon : Polygon = [];
@@ -45,10 +44,10 @@ class PrimaryGlyph {
             }
             new_polygons.push(new_polygon);
         }
-        return new PrimaryGlyph(new_polygons, transform_rect(this.rect, func), transform_rect(this.child_rect, func));
+        return new Glyph(new_polygons, transform_rect(this.rect, func));
     }
 
-    fit_to_rect(rect: Rect) : PrimaryGlyph {
+    fit_to_rect(rect: Rect) : Glyph {
         return this.translate(pos => [pos[0] * (rect.w / this.rect.w) + rect.x, pos[1] * (rect.h / this.rect.h) + rect.y]);
     }
 
@@ -68,34 +67,97 @@ class PrimaryGlyph {
 
         return result;
     }
+}
+
+
+
+class BlockGlyph extends Glyph {
+
+    child_rect: Rect;
+
+    constructor(polygons: Polygon[], rect: Rect, child_rect: Rect) {
+        super(polygons, rect);
+        this.child_rect = child_rect;
+    }
+
+    translate(func: (pos: Pos2d) => Pos2d) : BlockGlyph {
+        let glyph_result = super.translate(func);
+        return new BlockGlyph(glyph_result.polygons, glyph_result.rect, transform_rect(this.child_rect, func));
+    }
+
+    fit_to_rect(rect: Rect) : BlockGlyph {
+        return this.translate(pos => [pos[0] * (rect.w / this.rect.w) + rect.x, pos[1] * (rect.h / this.rect.h) + rect.y]);
+    }
 
 }
 
 
 
-function parseGlyphJson() : GlyphJsonParseResult {
-    let result : GlyphJsonParseResult = { primary_glyphs: {} };
+class DecalGlyph extends Glyph {}
 
-    for(const alphabet of Object.keys(glyphdata.primary_glyphs)) {
-        const glyphJson = glyphdata.primary_glyphs[alphabet];
+
+
+class GlyphBuilder {
+    
+    glyphs: Glyph[];
+    position: Pos2d
+
+    constructor(position: Pos2d = [0, 0]) {
+        this.position = position;
+        this.glyphs = [];
+    }
+
+    addWord() {
+
+    }
+
+}
+
+
+
+function pointStringToPolygon(points: string) : Polygon {
+    const pointArray = points.split(' ');
+    let polygon : Polygon = [];
+
+    for(const pointString of pointArray) {
+        let point = pointString.split(',');
+        polygon.push([Number.parseInt(point[0]), Number.parseInt(point[1])]);
+    }
+
+    return polygon;
+}
+
+
+
+function parseGlyphJson() : GlyphJsonParseResult {
+    let result : GlyphJsonParseResult = { block_glyphs: {}, decal_glyphs: {} };
+
+    for(const alphabet of Object.keys(glyphdata.block_glyphs)) {
+        const glyphJson = glyphdata.block_glyphs[alphabet];
         let polygons : Polygon[] = [];
 
         for(const polygonString of glyphJson.polygons) {
-            const pointArray = polygonString.split(' ');
-            let polygon : Polygon = [];
-
-            for(const pointString of pointArray) {
-                let point = pointString.split(',');
-                polygon.push([Number.parseInt(point[0]), Number.parseInt(point[1])]);
-            }
-
-            polygons.push(polygon);
+            polygons.push(pointStringToPolygon(polygonString));
         }
 
-        result.primary_glyphs[alphabet] = new PrimaryGlyph(
+        result.block_glyphs[alphabet] = new BlockGlyph(
             polygons, 
             { x: 0, y: 0, w: 10, h: 10 },
             { x: glyphJson.child_pos[0], y: glyphJson.child_pos[1], w: 4, h: 4 }
+        );
+    }
+
+    for(const alphabet of Object.keys(glyphdata.decal_glyphs)) {
+        const glyphJson = glyphdata.decal_glyphs[alphabet];
+        let polygons : Polygon[] = [];
+
+        for(const polygonString of glyphJson.polygons) {
+            polygons.push(pointStringToPolygon(polygonString));
+        }
+
+        result.decal_glyphs[alphabet] = new DecalGlyph(
+            polygons, 
+            { x: 0, y: 0, w: 10, h: 10 }
         );
     }
 
@@ -104,31 +166,37 @@ function parseGlyphJson() : GlyphJsonParseResult {
 
 
 
-let { primary_glyphs } = parseGlyphJson();
-let glyphs : PrimaryGlyph[] = [];
-
-const alphabets = "abcdefghijklmnopqrstuvwxyz";
-let a: string, b: string;
-for(var i = 0; i < alphabets.length; ++i) {
-    a = alphabets.charAt(i);
-    if(primary_glyphs[a]) {
-        let glyph = primary_glyphs[a];
-        let glyph1 = glyph.translate(pos => [(pos[0] + (12 * i)) * 5, pos[1] * 5]);
-        glyphs.push(glyph1);
-
-        b = alphabets.charAt(i+1 >= alphabets.length ? 0 : i+1);
-        if(primary_glyphs[b]) {
-            glyphs.push(primary_glyphs[b].fit_to_rect(glyph1.child_rect));
+(function() {
+    let { block_glyphs, decal_glyphs } = parseGlyphJson();
+    let glyphs : Glyph[] = [];
+    
+    const alphabets = "abcdefghijklmnopqrstuvwxyz";
+    let a: string, b: string;
+    for(var i = 0; i < alphabets.length; ++i) {
+        a = alphabets.charAt(i);
+        if(block_glyphs[a]) {
+            let glyph = block_glyphs[a];
+            let glyph1 = glyph.translate(pos => [(pos[0] + (12 * i)) * 5 + 10, pos[1] * 5 + 50]);
+            glyphs.push(glyph1);
+    
+            b = alphabets.charAt(i+1 >= alphabets.length ? 0 : i+1);
+            if(block_glyphs[b]) {
+                glyphs.push(block_glyphs[b].fit_to_rect(glyph1.child_rect));
+            }
+        }
+        if(decal_glyphs[a]) {
+            let glyph = decal_glyphs[a].translate(pos => [(pos[0] + (12 * i)) * 5 + 10, (pos[1] - 1) * 5 + 50]);
+            glyphs.push(glyph);
         }
     }
-}
-
-const document = new DOMImplementation().createDocument('http://www.w3.org/1999/xhtml', 'html', null);
-let svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-for(const glyph of glyphs) {
-    for(const polygon of glyph.to_svg_polygon(document, { fill: "#000000" })) {
-        svg.appendChild(polygon);
+    
+    const document = new DOMImplementation().createDocument('http://www.w3.org/1999/xhtml', 'html', null);
+    let svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    for(const glyph of glyphs) {
+        for(const polygon of glyph.to_svg_polygon(document, { fill: "#000000" })) {
+            svg.appendChild(polygon);
+        }
     }
-}
-
-fs.writeFileSync('examples/test.svg', new XMLSerializer().serializeToString(svg));
+    
+    fs.writeFileSync('examples/test.svg', new XMLSerializer().serializeToString(svg));
+})()
