@@ -120,31 +120,21 @@ class GlyphBuilder {
     start_pos: Pos2d;
     index: number;
     special_glyphs: boolean;
+    small_glyphs: boolean;
     pos_func: (index: number) => Pos2d;
 
-    constructor(start_pos: Pos2d = [0, 0]) {
+    constructor({start_pos, allow_special_glyphs = true, allow_small_glyphs = true, custom_pos_func = index => [index, 0]}: {
+        start_pos: Pos2d
+        allow_special_glyphs?: boolean,
+        allow_small_glyphs?: boolean,
+        custom_pos_func?: (index: number) => Pos2d
+    }) {
         this.start_pos = start_pos;
         this.glyphs = [];
         this.index = 0;
-        this.special_glyphs = true;
-        this.pos_func = index => [index, 0];
-    }
-
-    reset(start_pos: Pos2d = [0, 0]) : GlyphBuilder {
-        this.start_pos = start_pos;
-        this.glyphs = [];
-        this.index = 0;
-        return this;
-    }
-
-    allow_special_glyphs(b: boolean) : GlyphBuilder {
-        this.special_glyphs = b;
-        return this;
-    }
-
-    set_custom_pos_func(pos_func: (index: number) => Pos2d) : GlyphBuilder {
-        this.pos_func = pos_func;
-        return this;
+        this.special_glyphs = allow_special_glyphs;
+        this.small_glyphs = allow_small_glyphs;
+        this.pos_func = custom_pos_func;
     }
 
     add_sentence(sentence: string) : GlyphBuilder {
@@ -156,9 +146,9 @@ class GlyphBuilder {
                     this.add_word(word);
                     word = "";
                     break;
-                case ',':
+                case ':':
                     this.add_word(word);
-                    this.add_block_glyph(",");
+                    this.add_block_glyph(":");
                     word = "";
                     break;
                 case '.':
@@ -225,11 +215,19 @@ class GlyphBuilder {
             let { glyph, position } = this.add_block_glyph(letters[0]);
     
             if(letters.length != 1) {
-                let child_glyph = block_glyphs[letters[1]].fit_to_rect(glyph.child_rect);
-                this.glyphs.push(child_glyph);
+                let i: number;
+
+                if(this.small_glyphs) {
+                    let child_glyph = block_glyphs[letters[1]].fit_to_rect(glyph.child_rect);
+                    this.glyphs.push(child_glyph);
+                    i = 2;
+                }
+                else {
+                    i = 1;
+                }
         
-                let top: string[] = [], bottom: string[] = [], i: number, decal_glyph: DecalGlyph;
-                for(i = 2; i < letters.length; ++i) {
+                let top: string[] = [], bottom: string[] = [], decal_glyph: DecalGlyph;
+                for(; i < letters.length; ++i) {
                     if(i % 2 == 0) {
                         top.push(letters[i]);
                     }
@@ -331,25 +329,23 @@ function pointStringToPolygon(points: string, translate: Pos2d = [0, 0]) : Polyg
 
 (function() {
 
-    const sentence = "What the fuck did you just fucking say about me, you little bitch." + 
-    "I will have you know I graduated top of my class in the Navy Seals, and I have been involved in numerous secret raids on AlQuaeda, " + 
+    const sentence = "What the fuck did you just fucking say about me you little bitch." + 
+    "I will have you know I graduated top of my class in the Navy Seals and I have been involved in numerous secret raids on AlQuaeda " + 
     "and I have over three hundred confirmed kills. I am trained in gorilla warfare and I am the top sniper in the entire US armed forces. You are " + 
     "nothing to me but just another target. I will wipe you the fuck out with precision the likes of which has never been seen before on " + 
-    "this Earth, mark my fucking words. You think you can get away with saying that shit to me over the Internet. Think again, fucker. " + 
+    "this Earth mark my fucking words. You think you can get away with saying that shit to me over the Internet. Think again fucker. " + 
     "As we speak I am contacting my secret network of spies across the USA and your IP is being traced right now so you better prepare for " + 
-    "the storm, maggot. The storm that wipes out the pathetic little thing you call your life. You are fucking dead, kid. I can be anywhere, " + 
-    "anytime, and I can kill you in over seven hundred ways, and that is just with my bare hands. Not only am I extensively trained in unarmed " + 
-    "combat, but I have access to the entire arsenal of the United States Marine Corps and I will use it to its full extent to wipe your " + 
-    "miserable ass off the face of the continent, you little shit. If only you could have known what unholy retribution your little clever " + 
-    "comment was about to bring down upon you, maybe you would have held your fucking tongue. But you could not, you did not, and now you are " + 
-    "paying the price, you goddamn idiot. I will shit fury all over you and you will drown in it. You are fucking dead, kiddo.";
+    "the storm maggot. The storm that wipes out the pathetic little thing you call your life. You are fucking dead kid. I can be anywhere " + 
+    "anytime and I can kill you in over seven hundred ways and that is just with my bare hands. Not only am I extensively trained in unarmed " + 
+    "combat but I have access to the entire arsenal of the United States Marine Corps and I will use it to its full extent to wipe your " + 
+    "miserable ass off the face of the continent you little shit. If only you could have known what unholy retribution your little clever " + 
+    "comment was about to bring down upon you maybe you would have held your fucking tongue. But you could not you did not and now you are " + 
+    "paying the price you goddamn idiot. I will shit fury all over you and you will drown in it. You are fucking dead kiddo.";
 
     const document = new DOMImplementation().createDocument('http://www.w3.org/1999/xhtml', 'html', null);
-    let svg = new GlyphBuilder([20, 20])
-        .allow_special_glyphs(false)
-        .set_custom_pos_func(i => [i % 50, 3 * Math.floor(i / 50)])
-        .add_sentence(sentence)
-        .to_svg_element(document);
+    let svg = new GlyphBuilder({
+        start_pos: [20, 20], allow_small_glyphs: false, allow_special_glyphs: false
+    }).add_sentence(sentence).to_svg_element(document);
     
     fs.writeFileSync('examples/test.svg', new XMLSerializer().serializeToString(svg));
 })()
