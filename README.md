@@ -1,0 +1,1 @@
+<img src=".github/stratish glyph generator.png" height="50%" />
