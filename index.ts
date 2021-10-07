@@ -120,20 +120,20 @@ class GlyphBuilder {
     start_pos: Pos2d;
     index: number;
     special_glyphs: boolean;
-    small_glyphs: boolean;
+    child_depth: number;
     pos_func: (index: number) => Pos2d;
 
-    constructor({start_pos, allow_special_glyphs = true, allow_small_glyphs = true, custom_pos_func = index => [index, 0]}: {
+    constructor({start_pos, allow_special_glyphs = true, child_depth = 1, custom_pos_func = index => [index, 0]}: {
         start_pos: Pos2d
         allow_special_glyphs?: boolean,
-        allow_small_glyphs?: boolean,
+        child_depth?: number,
         custom_pos_func?: (index: number) => Pos2d
     }) {
         this.start_pos = start_pos;
         this.glyphs = [];
         this.index = 0;
         this.special_glyphs = allow_special_glyphs;
-        this.small_glyphs = allow_small_glyphs;
+        this.child_depth = child_depth;
         this.pos_func = custom_pos_func;
     }
 
@@ -143,16 +143,16 @@ class GlyphBuilder {
             char = sentence.charAt(i).toLocaleLowerCase();
             switch(char) {
                 case ' ':
-                    this.add_word(word);
+                    this.add_single_word(word);
                     word = "";
                     break;
                 case ':':
-                    this.add_word(word);
+                    this.add_single_word(word);
                     this.add_block_glyph(":");
                     word = "";
                     break;
                 case '.':
-                    this.add_word(word);
+                    this.add_single_word(word);
                     this.add_block_glyph(".");
                     word = "";
                     break;
@@ -160,22 +160,23 @@ class GlyphBuilder {
                     word += char;
             }
         }
+        if(word !== '') {
+            this.add_single_word(word);
+        }
         return this;
     }
 
-    add_word(word: string) : GlyphBuilder {
+    add_single_word(word: string) : GlyphBuilder {
 
         switch(word) {
+            case 'i':
+                this.add_block_glyph("first_person");
+                break;
             case 'the':
             case 'that':
             case 'they':
                 if(this.special_glyphs) {
                     this.add_block_glyph("the");
-                    break;
-                }
-            case 'i':
-                if(this.special_glyphs) {
-                    this.add_block_glyph("first_person");
                     break;
                 }
             default:
@@ -215,15 +216,13 @@ class GlyphBuilder {
             let { glyph, position } = this.add_block_glyph(letters[0]);
     
             if(letters.length != 1) {
-                let i: number;
+                let i = 1, rect = glyph.child_rect;
 
-                if(this.small_glyphs) {
-                    let child_glyph = block_glyphs[letters[1]].fit_to_rect(glyph.child_rect);
+                for(; i < this.child_depth+1; ++i) {
+                    if(i >= letters.length) break;
+                    let child_glyph = block_glyphs[letters[i]].fit_to_rect(rect);
+                    rect = child_glyph.child_rect;
                     this.glyphs.push(child_glyph);
-                    i = 2;
-                }
-                else {
-                    i = 1;
                 }
         
                 let top: string[] = [], bottom: string[] = [], decal_glyph: DecalGlyph;
@@ -329,22 +328,11 @@ function pointStringToPolygon(points: string, translate: Pos2d = [0, 0]) : Polyg
 
 (function() {
 
-    const sentence = "What the fuck did you just fucking say about me you little bitch." + 
-    "I will have you know I graduated top of my class in the Navy Seals and I have been involved in numerous secret raids on AlQuaeda " + 
-    "and I have over three hundred confirmed kills. I am trained in gorilla warfare and I am the top sniper in the entire US armed forces. You are " + 
-    "nothing to me but just another target. I will wipe you the fuck out with precision the likes of which has never been seen before on " + 
-    "this Earth mark my fucking words. You think you can get away with saying that shit to me over the Internet. Think again fucker. " + 
-    "As we speak I am contacting my secret network of spies across the USA and your IP is being traced right now so you better prepare for " + 
-    "the storm maggot. The storm that wipes out the pathetic little thing you call your life. You are fucking dead kid. I can be anywhere " + 
-    "anytime and I can kill you in over seven hundred ways and that is just with my bare hands. Not only am I extensively trained in unarmed " + 
-    "combat but I have access to the entire arsenal of the United States Marine Corps and I will use it to its full extent to wipe your " + 
-    "miserable ass off the face of the continent you little shit. If only you could have known what unholy retribution your little clever " + 
-    "comment was about to bring down upon you maybe you would have held your fucking tongue. But you could not you did not and now you are " + 
-    "paying the price you goddamn idiot. I will shit fury all over you and you will drown in it. You are fucking dead kiddo.";
+    const sentence = "It asks of my DOI to destroy and erase the Volatility for this entity is absolute I fear this obvious obliviousness";
 
     const document = new DOMImplementation().createDocument('http://www.w3.org/1999/xhtml', 'html', null);
     let svg = new GlyphBuilder({
-        start_pos: [20, 20], allow_small_glyphs: false, allow_special_glyphs: false
+        start_pos: [20, 20], child_depth: 1, allow_special_glyphs: false
     }).add_sentence(sentence).to_svg_element(document);
     
     fs.writeFileSync('examples/test.svg', new XMLSerializer().serializeToString(svg));
