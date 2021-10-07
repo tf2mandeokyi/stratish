@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as glyphdata from './glyph.json';
 import { DOMImplementation, XMLSerializer } from 'xmldom';
+import { Command } from 'commander';
 
 
 
@@ -18,9 +19,9 @@ interface GlyphJsonParseResult {
 
 
 function transform_rect(rect: Rect, func: (pos: Pos2d) => Pos2d) : Rect {
-    let new_lt : Pos2d = func([rect.x, rect.y]);
-    let new_rb : Pos2d = func([rect.x + rect.w, rect.y + rect.h]);
-    return { x: new_lt[0], y: new_lt[1], w: new_rb[0] - new_lt[0], h: new_rb[1] - new_lt[1] };
+    let lt : Pos2d = func([rect.x, rect.y]);
+    let rb : Pos2d = func([rect.x + rect.w, rect.y + rect.h]);
+    return { x: Math.min(lt[0], rb[0]), y: Math.min(lt[1], rb[1]), w: Math.abs(rb[0] - lt[0]), h: Math.abs(rb[1] - lt[1]) };
 }
 
 
@@ -123,13 +124,12 @@ class GlyphBuilder {
     child_depth: number;
     pos_func: (index: number) => Pos2d;
 
-    constructor({start_pos, allow_special_glyphs = true, child_depth = 1, custom_pos_func = index => [index, 0]}: {
-        start_pos: Pos2d
+    constructor({allow_special_glyphs = true, child_depth = 1, custom_pos_func = index => [index, 0]}: {
         allow_special_glyphs?: boolean,
         child_depth?: number,
         custom_pos_func?: (index: number) => Pos2d
     }) {
-        this.start_pos = start_pos;
+        this.start_pos = [0, 0];
         this.glyphs = [];
         this.index = 0;
         this.special_glyphs = allow_special_glyphs;
@@ -187,7 +187,7 @@ class GlyphBuilder {
                     else {
                         if(char == 'j') {
                             first.push('d', 'z');
-                        }
+                        } // Change this if statement
                         else {
                             first.push(char);
                         }
@@ -263,9 +263,23 @@ class GlyphBuilder {
     }
 
     to_svg_element(document: XMLDocument) : SVGSVGElement {
-        let svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        let min : Pos2d = [0, 0], max: Pos2d = [0, 0];
         for(const glyph of this.glyphs) {
-            for(const polygon of glyph.to_svg_polygon(document, { fill: "#000000" })) {
+            console.log(glyph.rect);
+            if(glyph.rect.x < min[0]) min[0] = glyph.rect.x;
+            if(glyph.rect.y < min[1]) min[1] = glyph.rect.y;
+            if(glyph.rect.x + glyph.rect.w > max[0]) max[0] = glyph.rect.x + glyph.rect.w;
+            if(glyph.rect.y + glyph.rect.h > max[1]) max[1] = glyph.rect.y + glyph.rect.h;
+        }
+        let bbox : Rect = { x: min[0], y: min[1], w: max[0] - min[0], h: max[1] - min[1] };
+        console.log(bbox);
+
+        let svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        svg.setAttribute("width", bbox.w + "");
+        svg.setAttribute("height", bbox.h + "")
+        for(const glyph of this.glyphs) {
+            let glyph1 = glyph.translate(pos => [pos[0] - min[0], pos[1] - min[1]]);
+            for(const polygon of glyph1.to_svg_polygon(document, { fill: "#000000" })) {
                 svg.appendChild(polygon);
             }
         }
@@ -300,7 +314,7 @@ class GlyphBuilder {
     
             result.decal_glyphs[alphabet] = new DecalGlyph(
                 shape, 
-                { x: 0, y: 0, w: 10, h: glyphJson.height },
+                { x: 0, y: 0, w: 10, h: -glyphJson.height },
                 glyphJson.height
             );
         }
@@ -328,12 +342,18 @@ function pointStringToPolygon(points: string, translate: Pos2d = [0, 0]) : Polyg
 
 (function() {
 
-    const sentence = "It asks of my DOI to destroy and erase the Volatility for this entity is absolute I fear this obvious obliviousness";
+    const program = new Command();
+
+    program
+        .requiredOption('-t, --text <text>', 'text to parse')
+        .option('-d, --depth <number>', 'child block glyph depth', '1')
+        .parse();
 
     const document = new DOMImplementation().createDocument('http://www.w3.org/1999/xhtml', 'html', null);
     let svg = new GlyphBuilder({
-        start_pos: [20, 20], child_depth: 1, allow_special_glyphs: false
-    }).add_sentence(sentence).to_svg_element(document);
+        child_depth: program.opts().depth - 0, allow_special_glyphs: false
+    }).add_sentence(program.opts().text).to_svg_element(document);
     
-    fs.writeFileSync('examples/test.svg', new XMLSerializer().serializeToString(svg));
+    fs.writeFileSync('result.svg', new XMLSerializer().serializeToString(svg));
+    console.log("Exported to result.svg")
 })()
