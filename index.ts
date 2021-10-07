@@ -26,6 +26,12 @@ function transform_rect(rect: Rect, func: (pos: Pos2d) => Pos2d) : Rect {
 
 
 
+function pos2dToString(pos: Pos2d) : string {
+    return `${pos[0]} ${pos[1]}`
+}
+
+
+
 class Glyph {
 
     shape: Polygon[];
@@ -122,18 +128,24 @@ class GlyphBuilder {
     index: number;
     special_glyphs: boolean;
     child_depth: number;
+    scale: number;
+    reserved: { [x: string]: boolean };
+    occupied: { [x: string]: boolean };
     pos_func: (index: number) => Pos2d;
 
-    constructor({allow_special_glyphs = true, child_depth = 1, custom_pos_func = index => [index, 0]}: {
+    constructor({allow_special_glyphs = true, child_depth = 1, custom_pos_func = index => [index, 0], scale = 1}: {
         allow_special_glyphs?: boolean,
         child_depth?: number,
+        scale?: number,
         custom_pos_func?: (index: number) => Pos2d
     }) {
         this.start_pos = [0, 0];
         this.glyphs = [];
         this.index = 0;
+        this.scale = scale;
         this.special_glyphs = allow_special_glyphs;
         this.child_depth = child_depth;
+        this.reserved = {}; this.occupied = {};
         this.pos_func = custom_pos_func;
     }
 
@@ -143,8 +155,10 @@ class GlyphBuilder {
             char = sentence.charAt(i).toLocaleLowerCase();
             switch(char) {
                 case ' ':
-                    this.add_single_word(word);
-                    word = "";
+                    if(word !== '') {
+                        this.add_single_word(word);
+                        word = "";
+                    }
                     break;
                 case ':':
                     this.add_single_word(word);
@@ -185,14 +199,17 @@ class GlyphBuilder {
                     let char = word.charAt(i).toLocaleLowerCase();
                     if(GlyphBuilder.vowels.includes(char)) second.push(char);
                     else {
-                        if(char == 'j') {
+                        if(char == 'j' && first.length <= this.child_depth) {
                             first.push('d', 'z');
-                        } // Change this if statement
+                        } // TODO: remove this when j-block-glyph is found
                         else {
                             first.push(char);
                         }
                     }
                 }
+                this.reserved[pos2dToString(this.pos_func(this.index))] = true;
+                this.reserved[pos2dToString(this.pos_func(this.index + 1))] = true;
+                this.reserved[pos2dToString(this.pos_func(this.index + 2))] = true;
                 this.add_glyph(first);
                 this.add_glyph(second);
                 return this;
@@ -201,6 +218,10 @@ class GlyphBuilder {
 
     private add_block_glyph(letter: string) : {glyph: BlockGlyph, position: Pos2d} {
         let translate_pos : Pos2d = this.pos_func(this.index);
+        if(this.occupied[pos2dToString(translate_pos)]) {
+            throw new Error(`Glyph collision! (at: x=${translate_pos[0]}, y=${translate_pos[1]})`);
+        }
+        this.occupied[pos2dToString(translate_pos)] = true;
         translate_pos = [translate_pos[0] * 11 + this.start_pos[0], translate_pos[1] * 11 + this.start_pos[1]];
 
         let glyph = GlyphBuilder.parse_result.block_glyphs[letter].translate(pos => [pos[0] + translate_pos[0], pos[1] + translate_pos[1]]);
@@ -209,12 +230,28 @@ class GlyphBuilder {
         return { glyph, position: translate_pos };
     }
 
-    private add_glyph(letters: string[]) : void {
-        let { block_glyphs, decal_glyphs } = GlyphBuilder.parse_result;
+    private add_decal_glyphs(letters: string[], position: Pos2d, func: (pos: Pos2d) => Pos2d) : void {
+        let height = 1, decal_glyph: DecalGlyph;
+        for(var i = 0; i < letters.length; ++i) {
+            if(i == letters.length - 1 && letters[i] == letters[i-1]) {
+                decal_glyph = GlyphBuilder.parse_result.decal_glyphs["ditto"];
+            }
+            else {
+                decal_glyph = GlyphBuilder.parse_result.decal_glyphs[letters[i]];
+            }
+            this.glyphs.push(decal_glyph.translate(pos => {
+                let pos1 = func([pos[0], pos[1] - height]);
+                return [pos1[0] + position[0], pos1[1] + position[1]]
+            }));
+            height += decal_glyph.height + 1;
+        }
+    }
 
+    private add_glyph(letters: string[]) : void {
         if(letters.length != 0) {
             let { glyph, position } = this.add_block_glyph(letters[0]);
-    
+            let { block_glyphs, decal_glyphs } = GlyphBuilder.parse_result;
+
             if(letters.length != 1) {
                 let i = 1, rect = glyph.child_rect;
 
@@ -225,38 +262,40 @@ class GlyphBuilder {
                     this.glyphs.push(child_glyph);
                 }
         
-                let top: string[] = [], bottom: string[] = [], decal_glyph: DecalGlyph;
-                for(; i < letters.length; ++i) {
-                    if(i % 2 == 0) {
-                        top.push(letters[i]);
+                let decals: [string[], string[], string[], string[]] = [[], [], [], []], 
+                    heights: [number, number, number, number] = [1, 1, 1, 1],
+                    decal_glyph: DecalGlyph, fail_count = 0;
+                const funcs: ((pos: Pos2d) => Pos2d)[] = [
+                    pos => pos,
+                    pos => [10 - pos[1], pos[0]],
+                    pos => [10 - pos[0], 10 - pos[1]],
+                    pos => [pos[1], 10 - pos[0]]
+                ]
+                for(var j = 0; i < letters.length; ++j, ++i) {
+                    if(fail_count >= 4) {
+                        throw new Error(`No space to put the decal at! (at: x=${position[0]}, y=${position[1]})`)
+                    }
+                    if(letters[i] == decals[j % 4][decals[j % 4].length - 1]) {
+                        decal_glyph = GlyphBuilder.parse_result.decal_glyphs["ditto"];
                     }
                     else {
-                        bottom.push(letters[i]);
+                        decal_glyph = GlyphBuilder.parse_result.decal_glyphs[letters[i]];
                     }
+                    let bbox = decal_glyph.translate(pos => {
+                        let pos1 = funcs[j % 4]([pos[0], pos[1] - heights[j % 4]]);
+                        return [pos1[0] + position[0], pos1[1] + position[1]]
+                    }).rect;
+                    let lt: Pos2d = [Math.floor(bbox.x / 11), Math.floor(bbox.y / 11)], 
+                        rb: Pos2d = [Math.floor((bbox.x + bbox.w) / 11), Math.floor((bbox.y + bbox.h) / 11)]
+                    if(this.reserved[pos2dToString(lt)] || this.reserved[pos2dToString(rb)] || this.occupied[pos2dToString(lt)] || this.occupied[pos2dToString(rb)]) {
+                        --i; ++fail_count; continue;
+                    }
+                    fail_count = 0;
+                    decals[j % 4].push(letters[i]);
+                    heights[j % 4] += decal_glyphs[letters[i]].height + 1;
                 }
-        
-                let height = 1;
-                for(i = 0; i < top.length; ++i) {
-                    if(i == top.length - 1 && top[i] == top[i-1]) {
-                        decal_glyph = decal_glyphs["ditto"];
-                    }
-                    else {
-                        decal_glyph = decal_glyphs[top[i]];
-                    }
-                    this.glyphs.push(decal_glyph.translate(pos => [pos[0] + position[0], pos[1] + position[1] - height]));
-                    height += decal_glyph.height + 1;
-                }
-        
-                height = 1;
-                for(i = 0; i < bottom.length; ++i) {
-                    if(i == bottom.length - 1 && bottom[i] == bottom[i-1]) {
-                        decal_glyph = decal_glyphs["ditto"];
-                    }
-                    else {
-                        decal_glyph = decal_glyphs[bottom[i]];
-                    }
-                    this.glyphs.push(decal_glyph.translate(pos => [-pos[0] + 10 + position[0], -pos[1] + 10 + position[1] + height]));
-                    height += decal_glyph.height + 1;
+                for(i = 0; i < 4; ++i) {
+                    this.add_decal_glyphs(decals[i], position, funcs[i]);
                 }
             }
         }
@@ -265,20 +304,18 @@ class GlyphBuilder {
     to_svg_element(document: XMLDocument) : SVGSVGElement {
         let min : Pos2d = [0, 0], max: Pos2d = [0, 0];
         for(const glyph of this.glyphs) {
-            console.log(glyph.rect);
             if(glyph.rect.x < min[0]) min[0] = glyph.rect.x;
             if(glyph.rect.y < min[1]) min[1] = glyph.rect.y;
             if(glyph.rect.x + glyph.rect.w > max[0]) max[0] = glyph.rect.x + glyph.rect.w;
             if(glyph.rect.y + glyph.rect.h > max[1]) max[1] = glyph.rect.y + glyph.rect.h;
         }
         let bbox : Rect = { x: min[0], y: min[1], w: max[0] - min[0], h: max[1] - min[1] };
-        console.log(bbox);
 
         let svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-        svg.setAttribute("width", bbox.w + "");
-        svg.setAttribute("height", bbox.h + "")
+        svg.setAttribute("width", this.scale * bbox.w + "");
+        svg.setAttribute("height", this.scale * bbox.h + "")
         for(const glyph of this.glyphs) {
-            let glyph1 = glyph.translate(pos => [pos[0] - min[0], pos[1] - min[1]]);
+            let glyph1 = glyph.translate(pos => [this.scale * (pos[0] - min[0]), this.scale * (pos[1] - min[1])]);
             for(const polygon of glyph1.to_svg_polygon(document, { fill: "#000000" })) {
                 svg.appendChild(polygon);
             }
@@ -347,11 +384,12 @@ function pointStringToPolygon(points: string, translate: Pos2d = [0, 0]) : Polyg
     program
         .requiredOption('-t, --text <text>', 'text to parse')
         .option('-d, --depth <number>', 'child block glyph depth', '1')
+        .option('-s, --scale <number>', 'scale', '1')
         .parse();
 
     const document = new DOMImplementation().createDocument('http://www.w3.org/1999/xhtml', 'html', null);
     let svg = new GlyphBuilder({
-        child_depth: program.opts().depth - 0, allow_special_glyphs: false
+        child_depth: program.opts().depth - 0, allow_special_glyphs: false, scale: program.opts().scale - 0, custom_pos_func: index => [index, 0]
     }).add_sentence(program.opts().text).to_svg_element(document);
     
     fs.writeFileSync('result.svg', new XMLSerializer().serializeToString(svg));
