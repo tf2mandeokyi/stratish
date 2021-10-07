@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as glyphdata from './glyph.json';
-import { DOMImplementation, XMLSerializer } from 'xmldom';
+import { DOMImplementation, XMLSerializer } from '@xmldom/xmldom';
 import { Command } from 'commander';
 
 
