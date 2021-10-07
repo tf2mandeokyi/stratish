@@ -129,14 +129,16 @@ class GlyphBuilder {
     special_glyphs: boolean;
     child_depth: number;
     scale: number;
+    fill: string;
     reserved: { [x: string]: boolean };
     occupied: { [x: string]: boolean };
     pos_func: (index: number) => Pos2d;
 
-    constructor({allow_special_glyphs = true, child_depth = 1, custom_pos_func = index => [index, 0], scale = 1}: {
+    constructor({allow_special_glyphs = true, child_depth = 1, custom_pos_func = index => [index, 0], scale = 1, fill = "#000000"}: {
         allow_special_glyphs?: boolean,
         child_depth?: number,
         scale?: number,
+        fill?: string,
         custom_pos_func?: (index: number) => Pos2d
     }) {
         this.start_pos = [0, 0];
@@ -146,6 +148,7 @@ class GlyphBuilder {
         this.special_glyphs = allow_special_glyphs;
         this.child_depth = child_depth;
         this.reserved = {}; this.occupied = {};
+        this.fill = fill;
         this.pos_func = custom_pos_func;
     }
 
@@ -156,17 +159,17 @@ class GlyphBuilder {
             switch(char) {
                 case ' ':
                     if(word !== '') {
-                        this.add_single_word(word);
+                        this.add_single_word(word, false);
                         word = "";
                     }
                     break;
                 case ':':
-                    this.add_single_word(word);
+                    this.add_single_word(word, false);
                     this.add_block_glyph(":");
                     word = "";
                     break;
                 case '.':
-                    this.add_single_word(word);
+                    this.add_single_word(word, false);
                     this.add_block_glyph(".");
                     word = "";
                     break;
@@ -175,12 +178,12 @@ class GlyphBuilder {
             }
         }
         if(word !== '') {
-            this.add_single_word(word);
+            this.add_single_word(word, true);
         }
         return this;
     }
 
-    add_single_word(word: string) : GlyphBuilder {
+    add_single_word(word: string, last: boolean) : GlyphBuilder {
 
         switch(word) {
             case 'i':
@@ -209,7 +212,7 @@ class GlyphBuilder {
                 }
                 this.reserved[pos2dToString(this.pos_func(this.index))] = true;
                 this.reserved[pos2dToString(this.pos_func(this.index + 1))] = true;
-                this.reserved[pos2dToString(this.pos_func(this.index + 2))] = true;
+                if(!last) this.reserved[pos2dToString(this.pos_func(this.index + 2))] = true;
                 this.add_glyph(first);
                 this.add_glyph(second);
                 return this;
@@ -239,10 +242,15 @@ class GlyphBuilder {
             else {
                 decal_glyph = GlyphBuilder.parse_result.decal_glyphs[letters[i]];
             }
-            this.glyphs.push(decal_glyph.translate(pos => {
+            decal_glyph = decal_glyph.translate(pos => {
                 let pos1 = func([pos[0], pos[1] - height]);
                 return [pos1[0] + position[0], pos1[1] + position[1]]
-            }));
+            })
+            let bbox = decal_glyph.rect;
+            let lt: Pos2d = [Math.floor(bbox.x / 11), Math.floor(bbox.y / 11)], 
+                rb: Pos2d = [Math.floor((bbox.x + bbox.w) / 11), Math.floor((bbox.y + bbox.h) / 11)];
+            this.glyphs.push(decal_glyph);
+            this.occupied[pos2dToString(lt)] = this.occupied[pos2dToString(rb)] = true;
             height += decal_glyph.height + 1;
         }
     }
@@ -286,7 +294,7 @@ class GlyphBuilder {
                         return [pos1[0] + position[0], pos1[1] + position[1]]
                     }).rect;
                     let lt: Pos2d = [Math.floor(bbox.x / 11), Math.floor(bbox.y / 11)], 
-                        rb: Pos2d = [Math.floor((bbox.x + bbox.w) / 11), Math.floor((bbox.y + bbox.h) / 11)]
+                        rb: Pos2d = [Math.floor((bbox.x + bbox.w) / 11), Math.floor((bbox.y + bbox.h) / 11)];
                     if(this.reserved[pos2dToString(lt)] || this.reserved[pos2dToString(rb)] || this.occupied[pos2dToString(lt)] || this.occupied[pos2dToString(rb)]) {
                         --i; ++fail_count; continue;
                     }
@@ -316,7 +324,7 @@ class GlyphBuilder {
         svg.setAttribute("height", this.scale * bbox.h + "")
         for(const glyph of this.glyphs) {
             let glyph1 = glyph.translate(pos => [this.scale * (pos[0] - min[0]), this.scale * (pos[1] - min[1])]);
-            for(const polygon of glyph1.to_svg_polygon(document, { fill: "#000000" })) {
+            for(const polygon of glyph1.to_svg_polygon(document, { fill: this.fill })) {
                 svg.appendChild(polygon);
             }
         }
@@ -385,6 +393,7 @@ function pointStringToPolygon(points: string, translate: Pos2d = [0, 0]) : Polyg
         .requiredOption('-t, --text <text>', 'text to parse')
         .option('-d, --depth <number>', 'child block glyph depth', '1')
         .option('-s, --scale <number>', 'scale', '1')
+        .option('-c, --color <color>', 'color value to color the glyphs', '#000000')
         .parse();
 
     const document = new DOMImplementation().createDocument('http://www.w3.org/1999/xhtml', 'html', null);
