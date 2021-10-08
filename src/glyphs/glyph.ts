@@ -1,12 +1,12 @@
-import { Polygon, Rect, Pos2d, transform_rect } from '../shapes';
+import { Polygon, Rectangle, Pos2d, transformRectangle } from '../shapes';
 
 export class Glyph {
 
     readonly shape: Polygon[];
-    readonly rect: Rect;
+    readonly rect: Rectangle;
     readonly class_name: string;
 
-    constructor(shape: Polygon[], rect: Rect, name: string) {
+    constructor(shape: Polygon[], rect: Rectangle, name: string) {
         this.shape = shape;
         this.rect = rect;
         this.class_name = name;
@@ -21,14 +21,14 @@ export class Glyph {
             }
             new_shape.push(new_polygon);
         }
-        return new Glyph(new_shape, transform_rect(this.rect, func), this.class_name);
+        return new Glyph(new_shape, transformRectangle(this.rect, func), this.class_name);
     }
 
-    fit_to_rect(rect: Rect) : Glyph {
+    fitToRectangle(rect: Rectangle) : Glyph {
         return this.translate(pos => [pos[0] * (rect.w / this.rect.w) + rect.x, pos[1] * (rect.h / this.rect.h) + rect.y]);
     }
 
-    to_svg_group(xmlDoc: XMLDocument, polygon_attrs: { [key: string]: string } ) : SVGGElement {
+    toSVGGroupElement(xmlDoc: XMLDocument, polygon_attrs: { [key: string]: string } ) : SVGGElement {
         
         let result : SVGGElement = xmlDoc.createElementNS("http://www.w3.org/2000/svg", "g");
         result.setAttribute("class", this.class_name);

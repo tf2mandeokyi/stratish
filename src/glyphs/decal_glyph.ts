@@ -1,11 +1,11 @@
 import { Glyph } from './glyph';
-import { Rect, Polygon, Pos2d } from '../shapes';
+import { Rectangle, Polygon, Pos2d } from '../shapes';
 
 export class DecalGlyph extends Glyph {
 
     readonly height: number;
 
-    constructor(shape: Polygon[], rect: Rect, height: number, name: string) {
+    constructor(shape: Polygon[], rect: Rectangle, height: number, name: string) {
         super(shape, rect, `decal-glyph ${name}`);
         this.height = height;
     }

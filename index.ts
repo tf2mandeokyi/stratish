@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import { DOMImplementation, XMLSerializer } from '@xmldom/xmldom';
 import { Command } from 'commander';
 import { GlyphBuilder } from './src/glyph_builder';
+import { ChangeDirection, PathPosArrayBuilder } from './src/functions/path_array_builder'
 
 (function() {
 
@@ -16,20 +17,35 @@ import { GlyphBuilder } from './src/glyph_builder';
         .option('-O, --thickness <number>', 'thickness of glyphs\' stroke', '0')
         .parse();
 
-    const document = new DOMImplementation().createDocument('http://www.w3.org/1999/xhtml', 'html', null);
 
-    let svg = new GlyphBuilder({
-        child_depth: program.opts().depth - 0, 
-        allow_special_glyphs: false, 
-        scale: program.opts().scale - 0, 
-        custom_pos_func: index => [index, 0],
-        polygon_attrs: {
-            fill: program.opts().fill,
-            'stroke-width': program.opts().thickness,
-            stroke: program.opts().stroke
-        }
-    }).add_sentence(program.opts().text).to_svg_element(document);
-    
-    fs.writeFileSync('result.svg', new XMLSerializer().serializeToString(svg));
-    console.log("Exported to result.svg")
+    /*
+    let posBuilder = new PathPosArrayBuilder({
+        10: [ new ChangeDirection([0, 1]) ]
+    });
+    */
+
+    try {
+        let glyphBuilder = new GlyphBuilder({
+            child_depth: program.opts().depth - 0, 
+            allow_special_glyphs: false, 
+            scale: program.opts().scale - 0, 
+            positionFunction: index => [index, 0]
+        }).addSentence(program.opts().text);
+        
+        const document = new DOMImplementation().createDocument('http://www.w3.org/1999/xhtml', 'html', null);
+        
+        let svg = glyphBuilder.toSVGElement(
+            document,
+            {
+                fill: program.opts().fill,
+                'stroke-width': program.opts().thickness,
+                stroke: program.opts().stroke
+            }
+        );
+        
+        fs.writeFileSync('result.svg', new XMLSerializer().serializeToString(svg));
+        console.log(`Exported to result.svg (Length: ${glyphBuilder.getTotalBlockGlyphCount()})`);
+    } catch(e) {
+        console.error(`[ERROR] ${e}`);
+    }
 })()

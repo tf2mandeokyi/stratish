@@ -18,7 +18,3 @@ ts-node index.ts --text "Your custom sentences goes here"
 ```
 
 To see all of the available options, run `ts-node index.ts -h`
-
-### Issues
-
-* The code will crash if you put characters other than `A~Z (Case Insensitive)` , `.`, `:` and `(Space)`
