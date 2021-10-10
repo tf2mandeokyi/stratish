@@ -2,13 +2,15 @@
 
 # Stratish Generator
 
-Inspired by [Stratzenblitz75](https://www.youtube.com/c/Stratzenblitz75), This is the source code that generates his glyph ― called "Stratish" ― that was used for a while.
+This source code generates [Stratzenblitz75](https://www.youtube.com/c/Stratzenblitz75)'s glyph ― called "Stratish" ― that was used for a while in his easter egg images / video frames.
 
 ## Usage
 
-This source code requires [Node.js](https://nodejs.org/) to be installed on your computer in order to generate Stratish as an .SVG (Scalable Vector Graphics) format.
+### Required Softwares
+ * [Node.js](https://nodejs.org/)
+ * [Git](https://git-scm.com/downloads)
 
-To generate your own stratish based on your custom sentences, run the command lines below, and check the `result.svg` file in the `stratish` directory.
+After the installation of required softwares is complete, to generate your own stratish as an .SVG (Scalable Vector Graphics) format, run the command lines below, and check the `result.svg` file in the `stratish` directory.
 
 ```bash
 git clone https://github.com/tf2mandeokyi/stratish
