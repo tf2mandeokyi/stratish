@@ -10,7 +10,7 @@ This source code generates [Stratzenblitz75](https://www.youtube.com/c/Stratzenb
  * [Node.js](https://nodejs.org/)
  * [Git](https://git-scm.com/downloads)
 
-After the installation of required softwares is complete, to generate your own stratish as an .SVG (Scalable Vector Graphics) format, run the command lines below, and check the `result.svg` file in the `stratish` directory.
+To generate your own stratish as an .SVG (Scalable Vector Graphics) format, run the command lines below, and check the `result.svg` file in the `stratish` directory.
 
 ```bash
 git clone https://github.com/tf2mandeokyi/stratish
