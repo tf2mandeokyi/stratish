@@ -100,20 +100,25 @@ export class GlyphBuilder {
         let word = "", char: string;
         for(var i = 0; i < sentence.length; ++i) {
             char = sentence.charAt(i).toLocaleLowerCase();
-            switch(char) {
+            let charCode = char.charCodeAt(0);
+
+            if(charCode >= 48 && charCode <= 57) { // char: ('0' ~ '9')
+                if(word !== '') this.addSingleWord(word, false);
+                this.addBlockGlyph(char);
+                word = "";
+            }
+            else switch(char) {
                 case ' ':
-                    if(word !== '') {
-                        this.addSingleWord(word, false);
-                        word = "";
-                    }
+                    if(word !== '') this.addSingleWord(word, false);
+                    word = "";
                     break;
                 case ':':
-                    this.addSingleWord(word, false);
+                    if(word !== '') this.addSingleWord(word, false);
                     this.addBlockGlyph(":");
                     word = "";
                     break;
                 case '.':
-                    this.addSingleWord(word, false);
+                    if(word !== '') this.addSingleWord(word, false);
                     this.addBlockGlyph(".");
                     word = "";
                     break;
@@ -121,9 +126,7 @@ export class GlyphBuilder {
                     word += char;
             }
         }
-        if(word !== '') {
-            this.addSingleWord(word, true);
-        }
+        if(word !== '') this.addSingleWord(word, true);
         return this;
     }
 
@@ -131,13 +134,14 @@ export class GlyphBuilder {
 
         switch(word) {
             case 'i':
-                this.addBlockGlyph("first_person");
-                break;
-            case 'the':
-            case 'that':
-            case 'they':
+            case 'me':
                 if(this.special_glyphs) {
-                    this.addBlockGlyph("the");
+                    this.addBlockGlyph("me");
+                    break;
+                }
+            case 'you':
+                if(this.special_glyphs) {
+                    this.addBlockGlyph("you");
                     break;
                 }
             default:
@@ -146,17 +150,16 @@ export class GlyphBuilder {
                     let char = word.charAt(i).toLocaleLowerCase();
                     if(GlyphBuilder.vowels.includes(char)) second.push(char);
                     else {
-                        if(char == 'j' && first.length <= this.child_depth) {
-                            first.push('d', 'z');
-                        } // TODO: remove this when j-block-glyph is found
-                        else {
-                            first.push(char);
-                        }
+                        first.push(char);
                     }
                 }
+
+                let bothFirstAndLastExists = first.length != 0 && second.length != 0;
+                
                 this.reserved[pos2dToString(this.pos_func(this.current_index))] = true;
-                this.reserved[pos2dToString(this.pos_func(this.current_index + 1))] = true;
-                if(!last) this.reserved[pos2dToString(this.pos_func(this.current_index + 2))] = true;
+                if(bothFirstAndLastExists || (!bothFirstAndLastExists && !last)) this.reserved[pos2dToString(this.pos_func(this.current_index + 1))] = true;
+                if(bothFirstAndLastExists && !last) this.reserved[pos2dToString(this.pos_func(this.current_index + 2))] = true;
+                
                 this.addGlyph(first);
                 this.addGlyph(second);
                 return this;
